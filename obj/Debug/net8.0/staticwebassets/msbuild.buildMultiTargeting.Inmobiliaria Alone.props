@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\Inmobiliaria Alone.props" />
+</Project>
