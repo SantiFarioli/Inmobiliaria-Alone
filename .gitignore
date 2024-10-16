@@ -1,0 +1,10 @@
+# Ignorar la carpeta obj
+obj/
+
+# Ignorar la carpeta bin
+bin/
+
+# Ignorar otras carpetas o archivos innecesarios
+.vscode/
+*.log
+*.tmp
