@@ -117,6 +117,7 @@ namespace Inmobiliaria_Alone.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromForm] LoginView loginView)
         {
+            //Busqueda del propietario por email
             var propietario = await _context.Propietarios.FirstOrDefaultAsync(x =>
                 x.Email == loginView.Usuario
             );
@@ -152,11 +153,13 @@ namespace Inmobiliaria_Alone.Controllers
             );
         }
 
+        //Verifica si la contraseña es correcta
         private bool VerifyPassword(string enteredPassword, string storedHash)
         {
             return HashPassword(enteredPassword) == storedHash;
         }
 
+        //Genera el token JWT
         private string GenerateJwtToken(Propietario propietario)
         {
             var key = new SymmetricSecurityKey(
