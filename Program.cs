@@ -14,7 +14,6 @@ builder.Services.AddDbContext<InmobiliariaContext>(options =>
     )
 );
 
-builder.WebHost.UseUrls("http://192.168.0.105:5157");
 
 var secretKey = builder.Configuration["TokenAuthentication:SecretKey"] ?? throw new ArgumentNullException("SecretKey is missing.");
 var key = Encoding.ASCII.GetBytes(secretKey);
