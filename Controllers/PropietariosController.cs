@@ -30,7 +30,7 @@ namespace Inmobiliaria_Alone.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Models.Propietario>>> GetPropietarios()
+        public async Task<ActionResult<IEnumerable<Propietario>>> GetPropietarios()
         {
             return await _context.Propietarios.ToListAsync();
         }
@@ -117,7 +117,6 @@ namespace Inmobiliaria_Alone.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromForm] LoginView loginView)
         {
-            //Busqueda del propietario por email
             var propietario = await _context.Propietarios.FirstOrDefaultAsync(x =>
                 x.Email == loginView.Usuario
             );
@@ -132,6 +131,27 @@ namespace Inmobiliaria_Alone.Controllers
 
             var token = GenerateJwtToken(propietario);
             return Ok(new { token });
+        }
+
+        [HttpGet("perfil")]
+        [Authorize]
+        public async Task<ActionResult<Propietario>> GetMyDetails()
+        {
+            var email = User.FindFirst(ClaimTypes.Name)?.Value;
+            if (email == null)
+            {
+                return Unauthorized();
+            }
+
+            var propietario = await _context.Propietarios.FirstOrDefaultAsync(p =>
+                p.Email == email
+            );
+            if (propietario == null)
+            {
+                return NotFound();
+            }
+
+            return propietario;
         }
 
         private string HashPassword(string password)
@@ -153,13 +173,11 @@ namespace Inmobiliaria_Alone.Controllers
             );
         }
 
-        //Verifica si la contraseña es correcta
         private bool VerifyPassword(string enteredPassword, string storedHash)
         {
             return HashPassword(enteredPassword) == storedHash;
         }
 
-        //Genera el token JWT
         private string GenerateJwtToken(Propietario propietario)
         {
             var key = new SymmetricSecurityKey(
@@ -175,6 +193,13 @@ namespace Inmobiliaria_Alone.Controllers
                 new Claim(ClaimTypes.Name, propietario.Email),
                 new Claim("FullName", propietario.Nombre + " " + propietario.Apellido),
                 new Claim(ClaimTypes.Role, "Propietario"),
+                new Claim("Dni", propietario.Dni),
+                new Claim("Telefono", propietario.Telefono),
+                new Claim(
+                    "FotoPerfil",
+                    propietario.FotoPerfil
+                ) // Nueva propiedad en el token
+                ,
             };
 
             var token = new JwtSecurityToken(
