@@ -12,9 +12,9 @@ namespace Inmobiliaria_Alone.Controllers
     [ApiController]
     public class InmueblesController : ControllerBase
     {
-        private readonly InmobiliariaContext _context;
+        private readonly MyDbContext _context;
 
-        public InmueblesController(InmobiliariaContext context)
+        public InmueblesController(MyDbContext context)
         {
             _context = context;
         }

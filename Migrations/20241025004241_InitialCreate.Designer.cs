@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Inmobiliaria_Alone.Migrations
 {
-    [DbContext(typeof(InmobiliariaContext))]
-    [Migration("20241016214146_InitialCreate")]
+    [DbContext(typeof(MyDbContext))]
+    [Migration("20241025004241_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -20,7 +20,7 @@ namespace Inmobiliaria_Alone.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.2")
+                .HasAnnotation("ProductVersion", "8.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
@@ -182,6 +182,10 @@ namespace Inmobiliaria_Alone.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("FotoPerfil")
                         .IsRequired()
                         .HasColumnType("longtext");
 

@@ -20,10 +20,10 @@ namespace Inmobiliaria_Alone.Controllers
     [ApiController]
     public class PropietariosController : ControllerBase
     {
-        private readonly InmobiliariaContext _context;
+        private readonly MyDbContext _context;
         private readonly IConfiguration _config;
 
-        public PropietariosController(InmobiliariaContext context, IConfiguration config)
+        public PropietariosController(MyDbContext context, IConfiguration config)
         {
             _context = context;
             _config = config;
@@ -71,6 +71,17 @@ namespace Inmobiliaria_Alone.Controllers
             {
                 return BadRequest();
             }
+
+            var existingPropietario = await _context
+                .Propietarios.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.IdPropietario == id);
+            if (existingPropietario == null)
+            {
+                return NotFound();
+            }
+
+            // Encriptar siempre la contraseña antes de guardar
+            propietario.Password = HashPassword(propietario.Password);
 
             _context.Entry(propietario).State = EntityState.Modified;
 
@@ -133,7 +144,7 @@ namespace Inmobiliaria_Alone.Controllers
             return Ok(new { token });
         }
 
-        [HttpGet("perfil")]
+        [HttpGet("me")]
         [Authorize]
         public async Task<ActionResult<Propietario>> GetMyDetails()
         {

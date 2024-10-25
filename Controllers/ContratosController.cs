@@ -13,9 +13,9 @@ namespace Inmobiliaria_Alone.Controllers
     [ApiController]
     public class ContratosController : ControllerBase
     {
-        private readonly InmobiliariaContext _context;
+        private readonly MyDbContext _context;
 
-        public ContratosController(InmobiliariaContext context)
+        public ContratosController(MyDbContext context)
         {
             _context = context;
         }

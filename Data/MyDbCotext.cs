@@ -3,19 +3,16 @@ using Inmobiliaria_Alone.Models;
 
 namespace Inmobiliaria_Alone.Data
 {
-    public class InmobiliariaContext : DbContext
+    public class MyDbContext : DbContext
     {
-        public InmobiliariaContext(DbContextOptions<InmobiliariaContext> options)
-         : base(options)
-        {
+        public MyDbContext(DbContextOptions<MyDbContext> options)
+            : base(options) { }
 
-        }
         public DbSet<Propietario> Propietarios { get; set; }
         public DbSet<Inmueble> Inmuebles { get; set; }
         public DbSet<Inquilino> Inquilinos { get; set; }
-        public DbSet<Contrato> Contratos { get; set; }
+        public DbSet<Contrato> Contratos { get; set; }           
         public DbSet<Pago> Pagos { get; set; }
-        
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -46,5 +43,6 @@ namespace Inmobiliaria_Alone.Data
                 .WithMany(c => c.Pagos)
                 .HasForeignKey(p => p.IdContrato);
         }
-    }     
+    }
 }
+
