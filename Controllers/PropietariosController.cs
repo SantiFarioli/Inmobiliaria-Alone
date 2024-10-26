@@ -144,7 +144,7 @@ namespace Inmobiliaria_Alone.Controllers
             return Ok(new { token });
         }
 
-        [HttpGet("me")]
+        [HttpGet("perfil")]
         [Authorize]
         public async Task<ActionResult<Propietario>> GetMyDetails()
         {
@@ -206,11 +206,7 @@ namespace Inmobiliaria_Alone.Controllers
                 new Claim(ClaimTypes.Role, "Propietario"),
                 new Claim("Dni", propietario.Dni),
                 new Claim("Telefono", propietario.Telefono),
-                new Claim(
-                    "FotoPerfil",
-                    propietario.FotoPerfil
-                ) // Nueva propiedad en el token
-                ,
+                new Claim("FotoPerfil", propietario.FotoPerfil) // Nueva propiedad en el toke
             };
 
             var token = new JwtSecurityToken(
