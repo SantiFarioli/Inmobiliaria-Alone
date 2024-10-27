@@ -148,7 +148,7 @@ namespace Inmobiliaria_Alone.Controllers
             return propietario;
         }
 
-        [HttpPost("solicitar-recuperacion-contrasena")]
+        [HttpPost("recuperacion-contrasenia")]
         [AllowAnonymous]
         public async Task<IActionResult> SolicitarRecuperacionContrasena([FromForm] string email)
         {
@@ -167,7 +167,7 @@ namespace Inmobiliaria_Alone.Controllers
             return Ok("El enlace para restablecer la contraseña ha sido enviado a su correo electrónico.");
         }
 
-        [HttpPost("restablecer-contrasena")]
+        [HttpPost("restablecer-contrasenia")]
         [AllowAnonymous]
         public async Task<IActionResult> RestablecerContrasena([FromForm] string token, [FromForm] string email, [FromForm] string nuevaContrasena)
         {
