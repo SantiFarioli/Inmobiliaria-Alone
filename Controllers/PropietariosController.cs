@@ -148,6 +148,7 @@ namespace Inmobiliaria_Alone.Controllers
             return propietario;
         }
 
+        // Endpoint para solicitar la recuperación de contraseña
         [HttpPost("recuperacion-contrasenia")]
         [AllowAnonymous]
         public async Task<IActionResult> SolicitarRecuperacionContrasena([FromForm] string email)
@@ -155,24 +156,36 @@ namespace Inmobiliaria_Alone.Controllers
             var propietario = await _context.Propietarios.FirstOrDefaultAsync(x => x.Email == email);
             if (propietario == null)
             {
-                return NotFound("No hay un usuario asociado con este correo electrónico.");
+                // Respuesta genérica para evitar enumeración de usuarios
+                return Ok("Si el correo está registrado, se enviará un enlace de recuperación.");
             }
 
             var token = GenerarTokenRestablecimientoContrasena(propietario);
-            var enlaceRestablecimiento = Url.Action("RestablecerContrasena", "Propietarios", new { token = token, email = email }, Request.Scheme);
+            var propietarioEmail = propietario.Email;
+            var enlaceRestablecimiento = $"{Request.Scheme}://{Request.Host}/api/Propietarios/restablecer-contrasenia?token={token}&email={propietarioEmail}";
+
 
             var mensaje = $"Por favor, restablezca su contraseña usando este enlace: <a href='{enlaceRestablecimiento}'>Restablecer Contraseña</a>";
             EnviarCorreo(propietario.Email, "Restablecimiento de Contraseña", mensaje);
 
-            return Ok("El enlace para restablecer la contraseña ha sido enviado a su correo electrónico.");
+            return Ok("Si el correo está registrado, se enviará un enlace de recuperación.");
         }
 
+        // Endpoint para restablecer la contraseña
         [HttpPost("restablecer-contrasenia")]
         [AllowAnonymous]
-        public async Task<IActionResult> RestablecerContrasena([FromForm] string token, [FromForm] string email, [FromForm] string nuevaContrasena)
+        public async Task<IActionResult> RestablecerContrasena([FromQuery] string token, [FromQuery] string email, [FromForm] string nuevaContrasena)
         {
+        // Verificar parámetros
+            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(nuevaContrasena))
+            {
+                return BadRequest("Parámetros inválidos.");
+            }
+
+            // Verificación del token
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_config["TokenAuthentication:SecretKey"]);
+
             try
             {
                 tokenHandler.ValidateToken(token, new TokenValidationParameters
@@ -181,7 +194,8 @@ namespace Inmobiliaria_Alone.Controllers
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidateIssuer = false,
                     ValidateAudience = false,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.Zero,
+                    ValidateLifetime = true
                 }, out SecurityToken validatedToken);
 
                 var jwtToken = (JwtSecurityToken)validatedToken;
@@ -198,6 +212,10 @@ namespace Inmobiliaria_Alone.Controllers
 
                 return Ok("La contraseña ha sido restablecida exitosamente.");
             }
+            catch (SecurityTokenExpiredException)
+            {
+                return BadRequest("El token ha expirado.");
+            }
             catch
             {
                 return BadRequest("Token inválido.");
@@ -211,6 +229,7 @@ namespace Inmobiliaria_Alone.Controllers
             {
                 throw new ArgumentNullException("Salt configuration is missing.");
             }
+
             byte[] salt = Encoding.ASCII.GetBytes(saltConfig);
             return Convert.ToBase64String(
                 KeyDerivation.Pbkdf2(
@@ -240,7 +259,7 @@ namespace Inmobiliaria_Alone.Controllers
                 new Claim(ClaimTypes.Role, "Propietario"),
                 new Claim("Dni", propietario.Dni),
                 new Claim("Telefono", propietario.Telefono),
-                new Claim("FotoPerfil", propietario.FotoPerfil) // Nueva propiedad en el token
+                new Claim("FotoPerfil", propietario.FotoPerfil)
             };
 
             var token = new JwtSecurityToken(
@@ -275,7 +294,7 @@ namespace Inmobiliaria_Alone.Controllers
         private void EnviarCorreo(string correoDestino, string asunto, string mensaje)
         {
             var emailMessage = new MimeMessage();
-            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", "no-reply@inmobiliaria-alone.com"));
+            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", _config["SMTP:SMTPUser"]));
             emailMessage.To.Add(new MailboxAddress("", correoDestino));
             emailMessage.Subject = asunto;
 
@@ -284,10 +303,18 @@ namespace Inmobiliaria_Alone.Controllers
 
             using (var client = new SmtpClient())
             {
-                client.Connect("smtp.tu-proveedor-de-correo.com", 587, false);
-                client.Authenticate("tu-correo@example.com", "tu-contraseña-de-correo");
-                client.Send(emailMessage);
-                client.Disconnect(true);
+                try
+                {
+                    client.Connect(_config["SMTP:SMTPHost"], int.Parse(_config["SMTP:SMTPPort"]), MailKit.Security.SecureSocketOptions.StartTls);
+                    client.Authenticate(_config["SMTP:SMTPUser"], _config["SMTP:SMTPPass"]);
+                    client.Send(emailMessage);
+                    client.Disconnect(true);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error al enviar correo: " + ex.Message);
+                    throw;
+                }
             }
         }
     }
