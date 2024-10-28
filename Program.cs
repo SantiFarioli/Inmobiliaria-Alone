@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using DotNetEnv; // Para cargar el archivo .env
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -7,6 +8,11 @@ using Microsoft.OpenApi.Models;
 using Inmobiliaria_Alone.Data;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Cargar variables del archivo .env
+Env.Load();
+Console.WriteLine("SecretKey: " + Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey"));
+
 
 // Configurar la cadena de conexión a la base de datos
 builder.Services.AddDbContext<MyDbContext>(options =>
@@ -17,7 +23,7 @@ builder.Services.AddDbContext<MyDbContext>(options =>
 );
 
 // Configurar JWT
-var secretKey = builder.Configuration["TokenAuthentication:SecretKey"];
+var secretKey = Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey"); // Usar variable de entorno
 if (string.IsNullOrEmpty(secretKey))
 {
     throw new InvalidOperationException("TokenAuthentication:SecretKey is not configured.");

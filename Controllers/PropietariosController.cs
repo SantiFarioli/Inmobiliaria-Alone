@@ -183,7 +183,8 @@ namespace Inmobiliaria_Alone.Controllers
 
             // Verificación del token
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_config["TokenAuthentication:SecretKey"]);
+            var secretKey = _config["TokenAuthentication:SecretKey"] ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
+            var key = Encoding.ASCII.GetBytes(secretKey);
 
             try
             {
@@ -197,15 +198,18 @@ namespace Inmobiliaria_Alone.Controllers
                     ValidateLifetime = true
                 }, out SecurityToken validatedToken);
 
+                // Decodificar el token JWT y obtener el UserId
                 var jwtToken = (JwtSecurityToken)validatedToken;
                 var userId = int.Parse(jwtToken.Claims.First(x => x.Type == "UserId").Value);
 
+                // Buscar el propietario en la base de datos
                 var propietario = await _context.Propietarios.FirstOrDefaultAsync(x => x.IdPropietario == userId && x.Email == email);
                 if (propietario == null)
                 {
                     return BadRequest("Token o correo electrónico inválido.");
                 }
 
+                // Restablecer la contraseña
                 propietario.Password = HashPassword(nuevaContrasena);
                 await _context.SaveChangesAsync();
 
@@ -214,6 +218,10 @@ namespace Inmobiliaria_Alone.Controllers
             catch (SecurityTokenExpiredException)
             {
                 return BadRequest("El token ha expirado.");
+            }
+            catch (SecurityTokenInvalidSignatureException)
+            {
+                return BadRequest("El token tiene una firma inválida.");
             }
             catch
             {
@@ -275,7 +283,8 @@ namespace Inmobiliaria_Alone.Controllers
         private string GenerarTokenRestablecimientoContrasena(Propietario propietario)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_config["TokenAuthentication:SecretKey"]);
+            var secretKey = _config["TokenAuthentication:SecretKey"] ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
+            var key = Encoding.ASCII.GetBytes(secretKey);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new Claim[]
@@ -292,27 +301,61 @@ namespace Inmobiliaria_Alone.Controllers
 
         private void EnviarCorreo(string correoDestino, string asunto, string mensaje)
         {
+            // Crear el mensaje de correo electrónico
             var emailMessage = new MimeMessage();
-            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", _config["SMTP:SMTPUser"]));
+            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", Environment.GetEnvironmentVariable("SMTPUser")));
             emailMessage.To.Add(new MailboxAddress("", correoDestino));
             emailMessage.Subject = asunto;
-
+        
             var bodyBuilder = new BodyBuilder { HtmlBody = mensaje };
             emailMessage.Body = bodyBuilder.ToMessageBody();
-
+        
             using (var client = new SmtpClient())
             {
                 try
                 {
-                    client.Connect(_config["SMTP:SMTPHost"], int.Parse(_config["SMTP:SMTPPort"]), MailKit.Security.SecureSocketOptions.StartTls);
-                    client.Authenticate(_config["SMTP:SMTPUser"], _config["SMTP:SMTPPass"]);
+                    // Obtener las variables de entorno
+                    var smtpHost = Environment.GetEnvironmentVariable("SMTPHost");
+                    var smtpPortStr = Environment.GetEnvironmentVariable("SMTPPort");
+                    var smtpUser = Environment.GetEnvironmentVariable("SMTPUser");
+                    var smtpPass = Environment.GetEnvironmentVariable("SMTPPass");
+        
+                    // Validar que las variables no sean nulas
+                    if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpPortStr) || string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPass))
+                    {
+                        throw new InvalidOperationException("Las variables de entorno SMTP no están configuradas correctamente.");
+                    }
+        
+                    // Convertir el puerto a entero
+                    if (!int.TryParse(smtpPortStr, out int smtpPort))
+                    {
+                        throw new InvalidOperationException("El valor de SMTPPort no es un número válido.");
+                    }
+        
+                    // Conectar al servidor SMTP con la opción de seguridad adecuada
+                    switch (smtpPort)
+                    {
+                        case 465:
+                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.SslOnConnect);
+                            break;
+                        case 587:
+                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
+                            break;
+                        default:
+                            throw new InvalidOperationException("El puerto SMTP no es válido. Use 465 para SSL o 587 para TLS.");
+                    }
+        
+                    // Autenticación usando las credenciales del entorno
+                    client.Authenticate(smtpUser, smtpPass);
+        
+                    // Enviar el correo
                     client.Send(emailMessage);
                     client.Disconnect(true);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("Error al enviar correo: " + ex.Message);
-                    throw;
+                    // Manejar la excepción (puedes registrar el error o lanzar una excepción personalizada)
+                    throw new InvalidOperationException("Error al enviar el correo electrónico.", ex);
                 }
             }
         }
