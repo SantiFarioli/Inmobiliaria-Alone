@@ -164,7 +164,6 @@ namespace Inmobiliaria_Alone.Controllers
             var propietarioEmail = propietario.Email;
             var enlaceRestablecimiento = $"{Request.Scheme}://{Request.Host}/api/Propietarios/restablecer-contrasenia?token={token}&email={propietarioEmail}";
 
-
             var mensaje = $"Por favor, restablezca su contraseña usando este enlace: <a href='{enlaceRestablecimiento}'>Restablecer Contraseña</a>";
             EnviarCorreo(propietario.Email, "Restablecimiento de Contraseña", mensaje);
 
@@ -176,7 +175,7 @@ namespace Inmobiliaria_Alone.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> RestablecerContrasena([FromQuery] string token, [FromQuery] string email, [FromForm] string nuevaContrasena)
         {
-        // Verificar parámetros
+            // Verificar parámetros
             if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(nuevaContrasena))
             {
                 return BadRequest("Parámetros inválidos.");
