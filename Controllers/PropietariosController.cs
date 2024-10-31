@@ -179,6 +179,9 @@ namespace Inmobiliaria_Alone.Controllers
 
             var tokenHandler = new JwtSecurityTokenHandler();
             var secretKey = _config["TokenAuthentication:SecretKey"] ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
+
+            Console.WriteLine("SecretKey en RestablecerContrasena: " + secretKey);
+
             var key = Encoding.ASCII.GetBytes(secretKey);
 
             try
@@ -293,8 +296,22 @@ namespace Inmobiliaria_Alone.Controllers
 
         private void EnviarCorreo(string correoDestino, string asunto, string mensaje)
         {
+            if (string.IsNullOrEmpty(correoDestino))
+            {
+                throw new ArgumentNullException(nameof(correoDestino), "El correo de destino no puede ser nulo o vacío.");
+            }
+
             var emailMessage = new MimeMessage();
-            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", Environment.GetEnvironmentVariable("SMTPUser")));
+
+            // Obtener el correo del remitente desde la configuración y verificarlo
+            var smtpUser = _config["SMTP:User"];
+            if (string.IsNullOrEmpty(smtpUser))
+            {
+                throw new ArgumentNullException("SMTP:User", "El correo del remitente (SMTP:User) no está configurado.");
+            }
+
+            // configura remitente y destinatario
+            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", smtpUser));
             emailMessage.To.Add(new MailboxAddress("", correoDestino));
             emailMessage.Subject = asunto;
 
@@ -305,10 +322,9 @@ namespace Inmobiliaria_Alone.Controllers
             {
                 try
                 {
-                    var smtpHost = Environment.GetEnvironmentVariable("SMTPHost");
-                    var smtpPortStr = Environment.GetEnvironmentVariable("SMTPPort");
-                    var smtpUser = Environment.GetEnvironmentVariable("SMTPUser");
-                    var smtpPass = Environment.GetEnvironmentVariable("SMTPPass");
+                    var smtpHost = _config["SMTP:Host"];
+                    var smtpPortStr = _config["SMTP:Port"];
+                    var smtpPass = _config["SMTP:Pass"];
 
                     if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpPortStr) || string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPass))
                     {
@@ -317,7 +333,7 @@ namespace Inmobiliaria_Alone.Controllers
 
                     if (!int.TryParse(smtpPortStr, out int smtpPort))
                     {
-                        throw new InvalidOperationException("El valor de SMTPPort no es un número válido.");
+                        throw new InvalidOperationException("El valor de SMTP:Port no es un número válido.");
                     }
 
                     switch (smtpPort)

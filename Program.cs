@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Serialization;
 using DotNetEnv; // Para cargar el archivo .env
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -10,9 +9,11 @@ using Inmobiliaria_Alone.Data;
 var builder = WebApplication.CreateBuilder(args);
 
 // Cargar variables del archivo .env
-Env.Load();
-Console.WriteLine("SecretKey: " + Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey"));
+Env.Load(); // Asegúrate de que esta línea esté antes de cualquier acceso a las variables de entorno
+builder.Configuration.AddEnvironmentVariables(); // Permitir acceso a las variables de entorno cargadas
 
+// Imprimir para depuración (opcional, eliminar en producción)
+Console.WriteLine("TokenAuthentication_SecretKey desde Environment: " + Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey"));
 
 // Configurar la cadena de conexión a la base de datos
 builder.Services.AddDbContext<MyDbContext>(options =>
@@ -65,7 +66,7 @@ builder
     .Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
 builder.Services.AddEndpointsApiExplorer();
