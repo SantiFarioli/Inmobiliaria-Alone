@@ -160,7 +160,9 @@ namespace Inmobiliaria_Alone.Controllers
 
             var token = GenerarTokenRestablecimientoContrasena(propietario);
             var propietarioEmail = propietario.Email;
-            var enlaceRestablecimiento = $"{Request.Scheme}://{Request.Host}/api/Propietarios/restablecer-contrasenia?token={token}&email={propietarioEmail}";
+           // var enlaceRestablecimiento = $"{Request.Scheme}://{Request.Host}/api/Propietarios/restablecer-contrasenia?token={token}&email={propietarioEmail}";
+           var enlaceRestablecimiento = $"http://192.168.0.108:5157/api/Propietarios/restablecer-contrasenia?token={token}&email={propietarioEmail}";
+
 
             var mensaje = $"Por favor, restablezca su contraseña usando este enlace: <a href='{enlaceRestablecimiento}'>Restablecer Contraseña</a>";
             EnviarCorreo(propietario.Email, "Restablecimiento de Contraseña", mensaje);
@@ -170,23 +172,23 @@ namespace Inmobiliaria_Alone.Controllers
 
         [HttpPost("restablecer-contrasenia")]
         [AllowAnonymous]
-        public async Task<IActionResult> RestablecerContrasena([FromQuery] string token, [FromQuery] string email, [FromForm] string nuevaContrasena)
+        public async Task<IActionResult> RestablecerContrasena([FromBody] RestablecerContrasenaRequest request)
         {
-            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(nuevaContrasena))
+            if (string.IsNullOrEmpty(request.Token) || string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.NuevaContrasena))
             {
                 return BadRequest("Parámetros inválidos.");
             }
-
+        
             var tokenHandler = new JwtSecurityTokenHandler();
             var secretKey = _config["TokenAuthentication:SecretKey"] ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
-
+        
             Console.WriteLine("SecretKey en RestablecerContrasena: " + secretKey);
-
+        
             var key = Encoding.ASCII.GetBytes(secretKey);
-
+        
             try
             {
-                tokenHandler.ValidateToken(token, new TokenValidationParameters
+                tokenHandler.ValidateToken(request.Token, new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
@@ -195,19 +197,20 @@ namespace Inmobiliaria_Alone.Controllers
                     ClockSkew = TimeSpan.Zero,
                     ValidateLifetime = true
                 }, out SecurityToken validatedToken);
-
+        
                 var jwtToken = (JwtSecurityToken)validatedToken;
-                var userId = int.Parse(jwtToken.Claims.First(x => x.Type == "UserId").Value);
-
-                var propietario = await _context.Propietarios.FirstOrDefaultAsync(x => x.IdPropietario == userId && x.Email == email);
+                var idPropietario = int.Parse(jwtToken.Claims.First(x => x.Type == "IdPropietario").Value);
+                var email = jwtToken.Claims.First(x => x.Type == ClaimTypes.Name).Value;
+        
+                var propietario = await _context.Propietarios.FirstOrDefaultAsync(x => x.IdPropietario == idPropietario && x.Email == email);
                 if (propietario == null)
                 {
                     return BadRequest("Token o correo electrónico inválido.");
                 }
-
-                propietario.Password = HashPassword(nuevaContrasena);
+        
+                propietario.Password = HashPassword(request.NuevaContrasena);
                 await _context.SaveChangesAsync();
-
+        
                 return Ok("La contraseña ha sido restablecida exitosamente.");
             }
             catch (SecurityTokenExpiredException)
@@ -284,8 +287,8 @@ namespace Inmobiliaria_Alone.Controllers
             {
                 Subject = new ClaimsIdentity(new Claim[]
                 {
-                    new Claim(ClaimTypes.Name, propietario.Email),
-                    new Claim("UserId", propietario.IdPropietario.ToString())
+                    new Claim("IdPropietario", propietario.IdPropietario.ToString()),
+                    new Claim(ClaimTypes.Name, propietario.Email)
                 }),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
@@ -296,68 +299,67 @@ namespace Inmobiliaria_Alone.Controllers
 
         private void EnviarCorreo(string correoDestino, string asunto, string mensaje)
         {
-        if (string.IsNullOrEmpty(correoDestino))
-        {
-            throw new ArgumentNullException(nameof(correoDestino), "El correo de destino no puede ser nulo o vacío.");
-        }
-
-        var emailMessage = new MimeMessage();
-
-        // Obtener el correo del remitente directamente desde las variables de entorno
-        var smtpUser = Environment.GetEnvironmentVariable("SMTP_User");
-        if (string.IsNullOrEmpty(smtpUser))
-        {
-            throw new ArgumentNullException("SMTP_User", "El correo del remitente (SMTP_User) no está configurado.");
-        }
-
-        emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", smtpUser));
-        emailMessage.To.Add(new MailboxAddress("", correoDestino));
-        emailMessage.Subject = asunto;
-
-        var bodyBuilder = new BodyBuilder { HtmlBody = mensaje };
-        emailMessage.Body = bodyBuilder.ToMessageBody();
-
-        using (var client = new SmtpClient())
-        {
-            try
+            if (string.IsNullOrEmpty(correoDestino))
             {
-                var smtpHost = Environment.GetEnvironmentVariable("SMTP_Host");
-                var smtpPortStr = Environment.GetEnvironmentVariable("SMTP_Port");
-                var smtpPass = Environment.GetEnvironmentVariable("SMTP_Pass");
-
-                if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpPortStr) || string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPass))
-                {
-                    throw new InvalidOperationException("Las configuraciones SMTP no están configuradas correctamente.");
-                }
-
-                if (!int.TryParse(smtpPortStr, out int smtpPort))
-                {
-                    throw new InvalidOperationException("El valor de SMTP_Port no es un número válido.");
-                }
-
-                // Conectar al servidor SMTP
-                switch (smtpPort)
-                {
-                    case 465:
-                        client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.SslOnConnect);
-                        break;
-                    case 587:
-                        client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
-                        break;
-                    default:
-                        throw new InvalidOperationException("El puerto SMTP no es válido. Use 465 para SSL o 587 para TLS.");
-                }
-
-                client.Authenticate(smtpUser, smtpPass);
-                client.Send(emailMessage);
-                client.Disconnect(true);
+                throw new ArgumentNullException(nameof(correoDestino), "El correo de destino no puede ser nulo o vacío.");
             }
-            catch (Exception ex)
+
+            var emailMessage = new MimeMessage();
+
+            // Obtener el correo del remitente directamente desde las variables de entorno
+            var smtpUser = Environment.GetEnvironmentVariable("SMTP_User");
+            if (string.IsNullOrEmpty(smtpUser))
             {
-                throw new InvalidOperationException("Error al enviar el correo electrónico.", ex);
+                throw new ArgumentNullException("SMTP_User", "El correo del remitente (SMTP_User) no está configurado.");
             }
-        }
 
+            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", smtpUser));
+            emailMessage.To.Add(new MailboxAddress("", correoDestino));
+            emailMessage.Subject = asunto;
+
+            var bodyBuilder = new BodyBuilder { HtmlBody = mensaje };
+            emailMessage.Body = bodyBuilder.ToMessageBody();
+
+            using (var client = new SmtpClient())
+            {
+                try
+                {
+                    var smtpHost = Environment.GetEnvironmentVariable("SMTP_Host");
+                    var smtpPortStr = Environment.GetEnvironmentVariable("SMTP_Port");
+                    var smtpPass = Environment.GetEnvironmentVariable("SMTP_Pass");
+
+                    if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpPortStr) || string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPass))
+                    {
+                        throw new InvalidOperationException("Las configuraciones SMTP no están configuradas correctamente.");
+                    }
+
+                    if (!int.TryParse(smtpPortStr, out int smtpPort))
+                    {
+                        throw new InvalidOperationException("El valor de SMTP_Port no es un número válido.");
+                    }
+
+                    // Conectar al servidor SMTP
+                    switch (smtpPort)
+                    {
+                        case 465:
+                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.SslOnConnect);
+                            break;
+                        case 587:
+                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
+                            break;
+                        default:
+                            throw new InvalidOperationException("El puerto SMTP no es válido. Use 465 para SSL o 587 para TLS.");
+                    }
+
+                    client.Authenticate(smtpUser, smtpPass);
+                    client.Send(emailMessage);
+                    client.Disconnect(true);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("Error al enviar el correo electrónico.", ex);
+                }
+            }
         }
     }
 
