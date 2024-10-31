@@ -296,67 +296,68 @@ namespace Inmobiliaria_Alone.Controllers
 
         private void EnviarCorreo(string correoDestino, string asunto, string mensaje)
         {
-            if (string.IsNullOrEmpty(correoDestino))
+        if (string.IsNullOrEmpty(correoDestino))
+        {
+            throw new ArgumentNullException(nameof(correoDestino), "El correo de destino no puede ser nulo o vacío.");
+        }
+
+        var emailMessage = new MimeMessage();
+
+        // Obtener el correo del remitente directamente desde las variables de entorno
+        var smtpUser = Environment.GetEnvironmentVariable("SMTP_User");
+        if (string.IsNullOrEmpty(smtpUser))
+        {
+            throw new ArgumentNullException("SMTP_User", "El correo del remitente (SMTP_User) no está configurado.");
+        }
+
+        emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", smtpUser));
+        emailMessage.To.Add(new MailboxAddress("", correoDestino));
+        emailMessage.Subject = asunto;
+
+        var bodyBuilder = new BodyBuilder { HtmlBody = mensaje };
+        emailMessage.Body = bodyBuilder.ToMessageBody();
+
+        using (var client = new SmtpClient())
+        {
+            try
             {
-                throw new ArgumentNullException(nameof(correoDestino), "El correo de destino no puede ser nulo o vacío.");
-            }
+                var smtpHost = Environment.GetEnvironmentVariable("SMTP_Host");
+                var smtpPortStr = Environment.GetEnvironmentVariable("SMTP_Port");
+                var smtpPass = Environment.GetEnvironmentVariable("SMTP_Pass");
 
-            var emailMessage = new MimeMessage();
-
-            // Obtener el correo del remitente desde la configuración y verificarlo
-            var smtpUser = _config["SMTP:User"];
-            if (string.IsNullOrEmpty(smtpUser))
-            {
-                throw new ArgumentNullException("SMTP:User", "El correo del remitente (SMTP:User) no está configurado.");
-            }
-
-            // configura remitente y destinatario
-            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", smtpUser));
-            emailMessage.To.Add(new MailboxAddress("", correoDestino));
-            emailMessage.Subject = asunto;
-
-            var bodyBuilder = new BodyBuilder { HtmlBody = mensaje };
-            emailMessage.Body = bodyBuilder.ToMessageBody();
-
-            using (var client = new SmtpClient())
-            {
-                try
+                if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpPortStr) || string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPass))
                 {
-                    var smtpHost = _config["SMTP:Host"];
-                    var smtpPortStr = _config["SMTP:Port"];
-                    var smtpPass = _config["SMTP:Pass"];
-
-                    if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpPortStr) || string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPass))
-                    {
-                        throw new InvalidOperationException("Las variables de entorno SMTP no están configuradas correctamente.");
-                    }
-
-                    if (!int.TryParse(smtpPortStr, out int smtpPort))
-                    {
-                        throw new InvalidOperationException("El valor de SMTP:Port no es un número válido.");
-                    }
-
-                    switch (smtpPort)
-                    {
-                        case 465:
-                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.SslOnConnect);
-                            break;
-                        case 587:
-                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
-                            break;
-                        default:
-                            throw new InvalidOperationException("El puerto SMTP no es válido. Use 465 para SSL o 587 para TLS.");
-                    }
-
-                    client.Authenticate(smtpUser, smtpPass);
-                    client.Send(emailMessage);
-                    client.Disconnect(true);
+                    throw new InvalidOperationException("Las configuraciones SMTP no están configuradas correctamente.");
                 }
-                catch (Exception ex)
+
+                if (!int.TryParse(smtpPortStr, out int smtpPort))
                 {
-                    throw new InvalidOperationException("Error al enviar el correo electrónico.", ex);
+                    throw new InvalidOperationException("El valor de SMTP_Port no es un número válido.");
                 }
+
+                // Conectar al servidor SMTP
+                switch (smtpPort)
+                {
+                    case 465:
+                        client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.SslOnConnect);
+                        break;
+                    case 587:
+                        client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
+                        break;
+                    default:
+                        throw new InvalidOperationException("El puerto SMTP no es válido. Use 465 para SSL o 587 para TLS.");
+                }
+
+                client.Authenticate(smtpUser, smtpPass);
+                client.Send(emailMessage);
+                client.Disconnect(true);
             }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Error al enviar el correo electrónico.", ex);
+            }
+        }
+
         }
     }
 

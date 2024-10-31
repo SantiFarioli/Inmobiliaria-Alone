@@ -12,6 +12,16 @@ var builder = WebApplication.CreateBuilder(args);
 Env.Load(); // Asegúrate de que esta línea esté antes de cualquier acceso a las variables de entorno
 builder.Configuration.AddEnvironmentVariables(); // Permitir acceso a las variables de entorno cargadas
 
+Console.WriteLine("SMTP_Host desde Environment: " + Environment.GetEnvironmentVariable("SMTP_Host"));
+Console.WriteLine("SMTP_Port desde Environment: " + Environment.GetEnvironmentVariable("SMTP_Port"));
+Console.WriteLine("SMTP_User desde Environment: " + Environment.GetEnvironmentVariable("SMTP_User"));
+Console.WriteLine("SMTP_Pass desde Environment: " + Environment.GetEnvironmentVariable("SMTP_Pass"));
+
+Console.WriteLine("SMTP:Host desde Configuration: " + builder.Configuration["SMTP:Host"]);
+Console.WriteLine("SMTP:Port desde Configuration: " + builder.Configuration["SMTP:Port"]);
+Console.WriteLine("SMTP:User desde Configuration: " + builder.Configuration["SMTP:User"]);
+Console.WriteLine("SMTP:Pass desde Configuration: " + builder.Configuration["SMTP:Pass"]);
+
 // Imprimir para depuración (opcional, eliminar en producción)
 Console.WriteLine("TokenAuthentication_SecretKey desde Environment: " + Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey"));
 
