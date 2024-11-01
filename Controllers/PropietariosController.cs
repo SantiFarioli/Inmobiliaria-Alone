@@ -196,6 +196,30 @@ namespace Inmobiliaria_Alone.Controllers
             await cliente.DisconnectAsync(true);
         }
 
+        [HttpGet("{id}/restablecer-contrasena")]
+        public IActionResult MostrarFormularioRestablecimiento(int id, [FromQuery] string token)
+        {
+            // Verificar si el token es válido y no ha expirado
+            var propietario = _context.Propietarios.FirstOrDefault(p => p.IdPropietario == id && p.ResetToken == token && p.ResetTokenExpiry > DateTime.UtcNow);
+            if (propietario == null)
+            {
+                return BadRequest("Token de restablecimiento inválido o expirado.");
+            }
+
+            return Ok(new
+            {
+                Message = "Formulario de restablecimiento de contraseña",
+                Token = token,
+                Propietario = new
+                {
+                    Id = propietario.IdPropietario,
+                    Email = propietario.Email,
+                    Nombre = propietario.Nombre,
+                    Apellido = propietario.Apellido
+                }
+            });  
+        }
+
         [HttpPost("{id}/restablecer-contrasena")]
         public async Task<IActionResult> RestablecerContraseña(int id, [FromBody] RestablecerContrasenaRequest request)
         {
