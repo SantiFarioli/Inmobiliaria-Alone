@@ -14,5 +14,8 @@ namespace Inmobiliaria_Alone.Models;
         public string Password { get; set; } = string.Empty;
         public string FotoPerfil { get; set; } = string.Empty;
         public ICollection<Inmueble> Inmuebles { get; set; } = new List<Inmueble>();
+
+        public string? ResetToken { get; set; }
+        public DateTime? ResetTokenExpiry { get; set; }
     }
 

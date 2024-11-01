@@ -148,83 +148,86 @@ namespace Inmobiliaria_Alone.Controllers
             return propietario;
         }
 
-        [HttpPost("recuperacion-contrasenia")]
-        [AllowAnonymous]
-        public async Task<IActionResult> SolicitarRecuperacionContrasena([FromForm] string email)
+        [HttpPost("solicitar-restablecimiento")]
+        public async Task<IActionResult> SolicitarRestablecimiento([FromForm] string email)
         {
-            var propietario = await _context.Propietarios.FirstOrDefaultAsync(x => x.Email == email);
+            var propietario = await _context.Propietarios.FirstOrDefaultAsync(p => p.Email == email);
             if (propietario == null)
             {
-                return Ok("Si el correo está registrado, se enviará un enlace de recuperación.");
+                return BadRequest("Correo electrónico no encontrado.");
             }
 
-            var token = GenerarTokenRestablecimientoContrasena(propietario);
-            var propietarioEmail = propietario.Email;
-           // var enlaceRestablecimiento = $"{Request.Scheme}://{Request.Host}/api/Propietarios/restablecer-contrasenia?token={token}&email={propietarioEmail}";
-           var enlaceRestablecimiento = $"http://192.168.0.108:5157/api/Propietarios/restablecer-contrasenia?token={token}&email={propietarioEmail}";
+            // Generar token de restablecimiento
+            var token = Guid.NewGuid().ToString();
 
+            // Guardar el token y su fecha de expiración
+            propietario.ResetToken = token;
+            propietario.ResetTokenExpiry = DateTime.UtcNow.AddHours(1); // Token válido por 1 hora
+            await _context.SaveChangesAsync();
 
-            var mensaje = $"Por favor, restablezca su contraseña usando este enlace: <a href='{enlaceRestablecimiento}'>Restablecer Contraseña</a>";
-            EnviarCorreo(propietario.Email, "Restablecimiento de Contraseña", mensaje);
+            // Enviar correo electrónico con el enlace de restablecimiento
+            var resetLink = $"{Request.Scheme}://{Request.Host}/api/Propietarios/{propietario.IdPropietario}/restablecer-contrasena?token={token}";
+            await EnviarCorreoAsync(email, "Restablecimiento de contraseña", $"Haga clic en el siguiente enlace para restablecer su contraseña: {resetLink}");
 
-            return Ok("Si el correo está registrado, se enviará un enlace de recuperación.");
+            return Ok("Se ha enviado un enlace de restablecimiento de contraseña a su correo electrónico.");
         }
 
-        [HttpPost("restablecer-contrasenia")]
-        [AllowAnonymous]
-        public async Task<IActionResult> RestablecerContrasena([FromBody] RestablecerContrasenaRequest request)
+        private async Task EnviarCorreoAsync(string destinatario, string asunto, string cuerpo)
         {
-            if (string.IsNullOrEmpty(request.Token) || string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.NuevaContrasena))
+            var mensaje = new MimeMessage();
+            mensaje.From.Add(new MailboxAddress("Nombre del remitente", _config["SMTP_User"]));
+            mensaje.To.Add(new MailboxAddress("Nombre del destinatario", destinatario));
+            mensaje.Subject = asunto;
+            mensaje.Body = new TextPart("plain") { Text = cuerpo };
+
+            using var cliente = new SmtpClient();
+
+            if (int.TryParse(_config["SMTP_Port"], out int smtpPort))
             {
-                return BadRequest("Parámetros inválidos.");
+                await cliente.ConnectAsync(_config["SMTP_Host"], smtpPort, true);
             }
-        
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var secretKey = _config["TokenAuthentication:SecretKey"] ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
-        
-            Console.WriteLine("SecretKey en RestablecerContrasena: " + secretKey);
-        
-            var key = Encoding.ASCII.GetBytes(secretKey);
-        
-            try
+            else
             {
-                tokenHandler.ValidateToken(request.Token, new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(key),
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
-                    ClockSkew = TimeSpan.Zero,
-                    ValidateLifetime = true
-                }, out SecurityToken validatedToken);
-        
-                var jwtToken = (JwtSecurityToken)validatedToken;
-                var idPropietario = int.Parse(jwtToken.Claims.First(x => x.Type == "IdPropietario").Value);
-                var email = jwtToken.Claims.First(x => x.Type == ClaimTypes.Name).Value;
-        
-                var propietario = await _context.Propietarios.FirstOrDefaultAsync(x => x.IdPropietario == idPropietario && x.Email == email);
-                if (propietario == null)
-                {
-                    return BadRequest("Token o correo electrónico inválido.");
-                }
-        
-                propietario.Password = HashPassword(request.NuevaContrasena);
-                await _context.SaveChangesAsync();
-        
-                return Ok("La contraseña ha sido restablecida exitosamente.");
+                throw new ArgumentException("Invalid SMTP port configuration");
             }
-            catch (SecurityTokenExpiredException)
+
+            await cliente.AuthenticateAsync(_config["SMTP_User"], _config["SMTP_Pass"]);
+            await cliente.SendAsync(mensaje);
+            await cliente.DisconnectAsync(true);
+        }
+
+        [HttpPost("{id}/restablecer-contrasena")]
+        public async Task<IActionResult> RestablecerContraseña(int id, [FromBody] RestablecerContrasenaRequest request)
+        {
+            var propietario = await _context.Propietarios.FindAsync(id);
+            if (propietario == null)
             {
-                return BadRequest("El token ha expirado.");
+                return NotFound("Propietario no encontrado.");
             }
-            catch (SecurityTokenInvalidSignatureException)
+
+            // Verificar el token de restablecimiento
+            if (!VerificarTokenDeRestablecimiento(propietario, request.Token))
             {
-                return BadRequest("El token tiene una firma inválida.");
+                return BadRequest("Token de restablecimiento inválido o expirado.");
             }
-            catch
+
+            // Actualizar la contraseña
+            propietario.Password = HashPassword(request.NuevaContrasena); 
+            await _context.SaveChangesAsync();
+
+            return Ok("Contraseña restablecida con éxito.");
+        }
+
+        private bool VerificarTokenDeRestablecimiento(Propietario propietario, string token)
+        {
+            // Verificar si el token y su fecha de expiración existen
+            if (propietario.ResetToken == null || propietario.ResetTokenExpiry == null)
             {
-                return BadRequest("Token inválido.");
+                return false;
             }
+
+            // Comprobar si el token coincide y si no ha expirado
+            return propietario.ResetToken == token && propietario.ResetTokenExpiry > DateTime.UtcNow;
         }
 
         private string HashPassword(string password)
@@ -277,90 +280,13 @@ namespace Inmobiliaria_Alone.Controllers
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+        
+    }
 
-        private string GenerarTokenRestablecimientoContrasena(Propietario propietario)
-        {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var secretKey = _config["TokenAuthentication:SecretKey"] ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
-            var key = Encoding.ASCII.GetBytes(secretKey);
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new Claim[]
-                {
-                    new Claim("IdPropietario", propietario.IdPropietario.ToString()),
-                    new Claim(ClaimTypes.Name, propietario.Email)
-                }),
-                Expires = DateTime.UtcNow.AddHours(1),
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            return tokenHandler.WriteToken(token);
-        }
-
-        private void EnviarCorreo(string correoDestino, string asunto, string mensaje)
-        {
-            if (string.IsNullOrEmpty(correoDestino))
-            {
-                throw new ArgumentNullException(nameof(correoDestino), "El correo de destino no puede ser nulo o vacío.");
-            }
-
-            var emailMessage = new MimeMessage();
-
-            // Obtener el correo del remitente directamente desde las variables de entorno
-            var smtpUser = Environment.GetEnvironmentVariable("SMTP_User");
-            if (string.IsNullOrEmpty(smtpUser))
-            {
-                throw new ArgumentNullException("SMTP_User", "El correo del remitente (SMTP_User) no está configurado.");
-            }
-
-            emailMessage.From.Add(new MailboxAddress("Inmobiliaria Alone", smtpUser));
-            emailMessage.To.Add(new MailboxAddress("", correoDestino));
-            emailMessage.Subject = asunto;
-
-            var bodyBuilder = new BodyBuilder { HtmlBody = mensaje };
-            emailMessage.Body = bodyBuilder.ToMessageBody();
-
-            using (var client = new SmtpClient())
-            {
-                try
-                {
-                    var smtpHost = Environment.GetEnvironmentVariable("SMTP_Host");
-                    var smtpPortStr = Environment.GetEnvironmentVariable("SMTP_Port");
-                    var smtpPass = Environment.GetEnvironmentVariable("SMTP_Pass");
-
-                    if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpPortStr) || string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPass))
-                    {
-                        throw new InvalidOperationException("Las configuraciones SMTP no están configuradas correctamente.");
-                    }
-
-                    if (!int.TryParse(smtpPortStr, out int smtpPort))
-                    {
-                        throw new InvalidOperationException("El valor de SMTP_Port no es un número válido.");
-                    }
-
-                    // Conectar al servidor SMTP
-                    switch (smtpPort)
-                    {
-                        case 465:
-                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.SslOnConnect);
-                            break;
-                        case 587:
-                            client.Connect(smtpHost, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
-                            break;
-                        default:
-                            throw new InvalidOperationException("El puerto SMTP no es válido. Use 465 para SSL o 587 para TLS.");
-                    }
-
-                    client.Authenticate(smtpUser, smtpPass);
-                    client.Send(emailMessage);
-                    client.Disconnect(true);
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("Error al enviar el correo electrónico.", ex);
-                }
-            }
-        }
+    public class RestablecerContrasenaRequest
+    {
+        public string Token { get; set; } = string.Empty;
+        public string NuevaContrasena { get; set; } = string.Empty;
     }
 
     public class LoginView
