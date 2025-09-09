@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Inmobiliaria_Alone.Data;
 using Inmobiliaria_Alone.Models;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 
 namespace Inmobiliaria_Alone.Controllers
@@ -92,9 +94,25 @@ namespace Inmobiliaria_Alone.Controllers
             return NoContent();
         }
 
-        private bool ContratoExists(int id)
+        [HttpGet("vigentes/mios")]
+        public async Task<IActionResult> VigentesMios()
         {
-            return _context.Contratos.Any(e => e.IdContrato == id);
+            var propietarioId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            var hoy = DateTime.Today;
+
+            var contratos = await _context.Contratos
+                .Include(c => c.Inquilino)
+                .Include(c => c.Inmueble)
+                .Where(c => c.Inmueble != null
+                        && c.Inmueble.IdPropietario == propietarioId
+                        && c.FechaInicio <= hoy
+                        && c.FechaFin >= hoy)
+                .ToListAsync();
+
+            return Ok(contratos);
         }
-    }
+
+        private bool ContratoExists(int id) =>
+            _context.Contratos.Any(e => e.IdContrato == id);
+        }
 }

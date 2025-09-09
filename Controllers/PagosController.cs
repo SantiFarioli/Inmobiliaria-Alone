@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Inmobiliaria_Alone.Models;
 using Inmobiliaria_Alone.Data;
+using System.Security.Claims;
 
 namespace Inmobiliaria_Alone.Controllers
 {
@@ -94,6 +95,28 @@ namespace Inmobiliaria_Alone.Controllers
         private bool PagoExists(int id)
         {
             return _context.Pagos.Any(e => e.IdPago == id);
+        }
+
+        // GET api/Pagos/por-contrato/123
+        [HttpGet("por-contrato/{idContrato:int}")]
+        public async Task<IActionResult> PorContrato(int idContrato)
+        {
+            var propietarioId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            var esMio = await _context.Contratos
+                .Include(c => c.Inmueble)
+                .AnyAsync(c => c.IdContrato == idContrato
+                            && c.Inmueble != null
+                            && c.Inmueble.IdPropietario == propietarioId);
+
+            if (!esMio) return Forbid();
+
+            var pagos = await _context.Pagos
+                .Where(p => p.IdContrato == idContrato)
+                .OrderByDescending(p => p.FechaPago)
+                .ToListAsync();
+
+            return Ok(pagos);
         }
     }
 }

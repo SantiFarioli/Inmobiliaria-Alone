@@ -14,6 +14,8 @@ namespace Inmobiliaria_Alone.Models;
         public int Ambientes { get; set; }
         public decimal Precio { get; set; }
         public string Estado { get; set; } = string.Empty;
+        [MaxLength(512)]
+        public string Foto { get; set; } = string.Empty;
 
         [ForeignKey("Propietario")]
         public int IdPropietario { get; set; }

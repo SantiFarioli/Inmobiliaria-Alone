@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Inmobiliaria_Alone.Models;
 using Inmobiliaria_Alone.Data;
+using System.Security.Claims;
 
 namespace Inmobiliaria_Alone.Controllers
 {
@@ -94,6 +95,21 @@ namespace Inmobiliaria_Alone.Controllers
         private bool InmuebleExists(int id)
         {
             return _context.Inmuebles.Any(e => e.IdInmueble == id);
+        }
+
+        // PATCH api/Inmuebles/5/disponibilidad   body: true/false
+        [HttpPatch("{idInmueble:int}/disponibilidad")]
+        public async Task<IActionResult> CambiarDisponibilidad(int idInmueble, [FromBody] bool disponible)
+        {
+            var propietarioId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            var inm = await _context.Inmuebles
+                .FirstOrDefaultAsync(i => i.IdInmueble == idInmueble && i.IdPropietario == propietarioId);
+            if (inm == null) return NotFound();
+
+            inm.Estado = disponible ? "Disponible" : "Ocupado"; // o "No disponible"
+            await _context.SaveChangesAsync();
+            return Ok(inm);
         }
     }
 }
