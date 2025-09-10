@@ -27,13 +27,13 @@ namespace Inmobiliaria_Alone.Controllers
             _config = config;
         }
 
-        // -------------------- CRUD BÁSICO --------------------
+        // ---------------------------------------------------
+        // CRUD BÁSICO
+        // ---------------------------------------------------
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Propietario>>> GetPropietarios()
-        {
-            return await _context.Propietarios.ToListAsync();
-        }
+            => await _context.Propietarios.ToListAsync();
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Propietario>> GetPropietario(int id)
@@ -52,31 +52,20 @@ namespace Inmobiliaria_Alone.Controllers
             return CreatedAtAction(nameof(GetPropietario), new { id = propietario.IdPropietario }, propietario);
         }
 
+        /// <summary>
+        /// PUT por id. Actualiza SOLO campos editables (no toca Password ni tokens).
+        /// </summary>
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutPropietario(int id, [FromBody] Propietario propietario)
+        public async Task<IActionResult> PutPropietario(int id, [FromBody] Propietario body)
         {
-            if (id != propietario.IdPropietario) return BadRequest();
+            if (id != body.IdPropietario) return BadRequest();
 
-            var existing = await _context.Propietarios.AsNoTracking()
-                                .FirstOrDefaultAsync(p => p.IdPropietario == id);
-            if (existing == null) return NotFound();
+            var db = await _context.Propietarios.FirstOrDefaultAsync(p => p.IdPropietario == id);
+            if (db == null) return NotFound();
 
-            // Si viene Password, la re-hasheamos; si no, conservamos la anterior
-            if (string.IsNullOrWhiteSpace(propietario.Password))
-                propietario.Password = existing.Password;
-            else
-                propietario.Password = HashPassword(propietario.Password);
-
-            _context.Entry(propietario).State = EntityState.Modified;
-
-            try { await _context.SaveChangesAsync(); }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!PropietarioExists(id)) return NotFound();
-                throw;
-            }
-
-            return NoContent();
+            ApplyEditableFields(db, body); // NO modifica Password/ResetToken/ResetTokenExpiry
+            await _context.SaveChangesAsync();
+            return Ok(db); // Ok para que el cliente pueda recibir el objeto actualizado
         }
 
         [HttpDelete("{id}")]
@@ -90,10 +79,9 @@ namespace Inmobiliaria_Alone.Controllers
             return NoContent();
         }
 
-        private bool PropietarioExists(int id) =>
-            _context.Propietarios.Any(e => e.IdPropietario == id);
-
-        // -------------------- AUTH --------------------
+        // ---------------------------------------------------
+        // AUTH / PERFIL
+        // ---------------------------------------------------
 
         [HttpPost("login")]
         [AllowAnonymous]
@@ -123,7 +111,29 @@ namespace Inmobiliaria_Alone.Controllers
             return propietario;
         }
 
-        // -------------------- RECUPERAR / RESTABLECER --------------------
+        /// <summary>
+        /// PUT api/Propietarios/perfil (con token).
+        /// Actualiza SOLO campos editables del propietario autenticado (NO password/tokens).
+        /// </summary>
+        [HttpPut("perfil")]
+        [Authorize]
+        public async Task<ActionResult<Propietario>> PutPerfil([FromBody] Propietario body)
+        {
+            var email = User.FindFirst(ClaimTypes.Name)?.Value;
+            if (email == null) return Unauthorized();
+
+            var db = await _context.Propietarios.FirstOrDefaultAsync(p => p.Email == email);
+            if (db == null) return NotFound();
+
+            ApplyEditableFields(db, body);
+            await _context.SaveChangesAsync();
+
+            return Ok(db); // Devolvemos el objeto final
+        }
+
+        // ---------------------------------------------------
+        // RECUPERAR / RESTABLECER CONTRASEÑA
+        // ---------------------------------------------------
 
         [HttpPost("solicitar-restablecimiento")]
         [AllowAnonymous]
@@ -148,7 +158,6 @@ namespace Inmobiliaria_Alone.Controllers
             }
             catch
             {
-                // Revertir token si falla el envío
                 propietario.ResetToken = null;
                 propietario.ResetTokenExpiry = null;
                 await _context.SaveChangesAsync();
@@ -193,7 +202,6 @@ namespace Inmobiliaria_Alone.Controllers
                 return BadRequest("Token de restablecimiento inválido o expirado.");
 
             propietario.Password = HashPassword(request.NuevaContrasena);
-            // opcional: limpiar token post-uso
             propietario.ResetToken = null;
             propietario.ResetTokenExpiry = null;
 
@@ -201,7 +209,21 @@ namespace Inmobiliaria_Alone.Controllers
             return Ok("Contraseña restablecida con éxito.");
         }
 
-        // -------------------- HELPERS --------------------
+        // ---------------------------------------------------
+        // HELPERS
+        // ---------------------------------------------------
+
+        private static void ApplyEditableFields(Propietario db, Propietario body)
+        {
+            // Copiamos solo los campos que el usuario puede editar desde la app:
+            db.Apellido   = body.Apellido ?? db.Apellido;
+            db.Nombre     = body.Nombre   ?? db.Nombre;
+            db.Dni        = body.Dni      ?? db.Dni;
+            db.Telefono   = body.Telefono ?? db.Telefono;
+            db.Email      = body.Email    ?? db.Email;
+            db.FotoPerfil = body.FotoPerfil ?? db.FotoPerfil;
+            // Password / ResetToken / ResetTokenExpiry NO se tocan acá.
+        }
 
         private bool VerificarTokenDeRestablecimiento(Propietario propietario, string token)
         {
@@ -227,12 +249,11 @@ namespace Inmobiliaria_Alone.Controllers
             );
         }
 
-        private bool VerifyPassword(string enteredPassword, string storedHash) =>
-            HashPassword(enteredPassword) == storedHash;
+        private bool VerifyPassword(string enteredPassword, string storedHash)
+            => HashPassword(enteredPassword) == storedHash;
 
         private string GenerateJwtToken(Propietario propietario)
         {
-            // Lee de appsettings o de variables de entorno (soporta TokenAuthentication__SecretKey)
             var secret = _config["TokenAuthentication:SecretKey"]
                          ?? Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey")
                          ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
@@ -248,7 +269,7 @@ namespace Inmobiliaria_Alone.Controllers
 
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name, propietario.Email),
+                new Claim(ClaimTypes.Name, propietario.Email), // usamos email para perfil/update
                 new Claim("FullName", $"{propietario.Nombre} {propietario.Apellido}"),
                 new Claim(ClaimTypes.Role, "Propietario"),
                 new Claim("Dni", propietario.Dni ?? string.Empty),
@@ -269,7 +290,6 @@ namespace Inmobiliaria_Alone.Controllers
 
         private async Task EnviarCorreoAsync(string destinatario, string asunto, string cuerpo)
         {
-            // Lee SMTP de appsettings o .env
             var host = _config["SMTP_Host"] ?? Environment.GetEnvironmentVariable("SMTP_Host") ?? "smtp.gmail.com";
             var portStr = _config["SMTP_Port"] ?? Environment.GetEnvironmentVariable("SMTP_Port") ?? "587";
             var user = _config["SMTP_User"] ?? Environment.GetEnvironmentVariable("SMTP_User");
@@ -290,14 +310,16 @@ namespace Inmobiliaria_Alone.Controllers
             var secure = portOk == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
 
             await cliente.ConnectAsync(host, portOk, secure);
-            cliente.AuthenticationMechanisms.Remove("XOAUTH2"); // forzar user/pass
+            cliente.AuthenticationMechanisms.Remove("XOAUTH2");
             await cliente.AuthenticateAsync(user, pass);
             await cliente.SendAsync(mensaje);
             await cliente.DisconnectAsync(true);
         }
     }
 
-    // -------------------- DTOs --------------------
+    // ---------------------------------------------------
+    // DTOs
+    // ---------------------------------------------------
 
     public class RestablecerContrasenaRequest
     {
