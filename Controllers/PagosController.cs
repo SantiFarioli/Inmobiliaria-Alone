@@ -6,11 +6,13 @@ using Microsoft.EntityFrameworkCore;
 using Inmobiliaria_Alone.Models;
 using Inmobiliaria_Alone.Data;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Inmobiliaria_Alone.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class PagosController : ControllerBase
     {
         private readonly MyDbContext _context;
@@ -101,7 +103,9 @@ namespace Inmobiliaria_Alone.Controllers
         [HttpGet("por-contrato/{idContrato:int}")]
         public async Task<IActionResult> PorContrato(int idContrato)
         {
-            var propietarioId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idClaim, out var propietarioId))
+                return Unauthorized();
 
             var esMio = await _context.Contratos
                 .Include(c => c.Inmueble)
@@ -118,5 +122,6 @@ namespace Inmobiliaria_Alone.Controllers
 
             return Ok(pagos);
         }
+
     }
 }

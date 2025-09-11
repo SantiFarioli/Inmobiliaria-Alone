@@ -11,6 +11,7 @@ using System.Security.Claims;
 
 namespace Inmobiliaria_Alone.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class ContratosController : ControllerBase

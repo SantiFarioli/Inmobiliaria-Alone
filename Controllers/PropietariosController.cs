@@ -255,21 +255,23 @@ namespace Inmobiliaria_Alone.Controllers
         private string GenerateJwtToken(Propietario propietario)
         {
             var secret = _config["TokenAuthentication:SecretKey"]
-                         ?? Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey")
-                         ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey")
+                        ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
 
             var issuer = _config["TokenAuthentication:Issuer"]
-                         ?? Environment.GetEnvironmentVariable("TokenAuthentication_Issuer");
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication_Issuer");
 
             var audience = _config["TokenAuthentication:Audience"]
-                         ?? Environment.GetEnvironmentVariable("TokenAuthentication_Audience");
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication_Audience");
 
             var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name, propietario.Email), // usamos email para perfil/update
+                // 👇 Este es el que necesita tu PagosController
+                new Claim(ClaimTypes.NameIdentifier, propietario.IdPropietario.ToString()),
+                new Claim(ClaimTypes.Name, propietario.Email), // te sirve para /perfil
                 new Claim("FullName", $"{propietario.Nombre} {propietario.Apellido}"),
                 new Claim(ClaimTypes.Role, "Propietario"),
                 new Claim("Dni", propietario.Dni ?? string.Empty),
@@ -287,6 +289,7 @@ namespace Inmobiliaria_Alone.Controllers
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+
 
         private async Task EnviarCorreoAsync(string destinatario, string asunto, string cuerpo)
         {
