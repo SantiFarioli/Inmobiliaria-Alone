@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Inmobiliaria_Alone.Models;
 using Inmobiliaria_Alone.Data;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Inmobiliaria_Alone.Controllers
 {
@@ -39,13 +40,20 @@ namespace Inmobiliaria_Alone.Controllers
             return inmueble;
         }
 
+        [Authorize]
         [HttpPost]
-        public async Task<ActionResult<Inmueble>> PostInmueble(Inmueble inmueble)
+        public async Task<ActionResult<Inmueble>> PostInmueble([FromBody] Inmueble body)
         {
-            _context.Inmuebles.Add(inmueble);
-            await _context.SaveChangesAsync();
+            var email = User.FindFirst(ClaimTypes.Name)?.Value;
+            var p = await _context.Propietarios.FirstOrDefaultAsync(x => x.Email == email);
+            if (p == null) return Unauthorized();
 
-            return CreatedAtAction(nameof(GetInmueble), new { id = inmueble.IdInmueble }, inmueble);
+            body.IdPropietario = p.IdPropietario;
+            if (string.IsNullOrWhiteSpace(body.Estado)) body.Estado = "Disponible";
+
+            _context.Inmuebles.Add(body);
+            await _context.SaveChangesAsync();
+            return CreatedAtAction(nameof(GetInmueble), new { id = body.IdInmueble }, body);
         }
 
         [HttpPut("{id}")]
