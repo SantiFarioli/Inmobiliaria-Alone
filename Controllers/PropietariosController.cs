@@ -111,10 +111,7 @@ namespace Inmobiliaria_Alone.Controllers
             return propietario;
         }
 
-        /// <summary>
-        /// PUT api/Propietarios/perfil (con token).
-        /// Actualiza SOLO campos editables del propietario autenticado (NO password/tokens).
-        /// </summary>
+        // PUT /api/Propietarios/perfil
         [HttpPut("perfil")]
         [Authorize]
         public async Task<ActionResult<Propietario>> PutPerfil([FromBody] Propietario body)
@@ -269,7 +266,7 @@ namespace Inmobiliaria_Alone.Controllers
 
             var claims = new List<Claim>
             {
-                // 👇 Este es el que necesita tu PagosController
+                
                 new Claim(ClaimTypes.NameIdentifier, propietario.IdPropietario.ToString()),
                 new Claim(ClaimTypes.Name, propietario.Email), // te sirve para /perfil
                 new Claim("FullName", $"{propietario.Nombre} {propietario.Apellido}"),
