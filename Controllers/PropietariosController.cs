@@ -51,10 +51,7 @@ namespace Inmobiliaria_Alone.Controllers
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetPropietario), new { id = propietario.IdPropietario }, propietario);
         }
-
-        /// <summary>
-        /// PUT por id. Actualiza SOLO campos editables (no toca Password ni tokens).
-        /// </summary>
+        
         [HttpPut("{id}")]
         public async Task<IActionResult> PutPropietario(int id, [FromBody] Propietario body)
         {
@@ -79,10 +76,7 @@ namespace Inmobiliaria_Alone.Controllers
             return NoContent();
         }
 
-        // ---------------------------------------------------
-        // AUTH / PERFIL
-        // ---------------------------------------------------
-
+        // POST /api/Propietarios/login
         [HttpPost("login")]
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromForm] LoginView loginView)
@@ -98,6 +92,7 @@ namespace Inmobiliaria_Alone.Controllers
             return Ok(new { token });
         }
 
+        // GET /api/Propietarios/perfil
         [HttpGet("perfil")]
         [Authorize]
         public async Task<ActionResult<Propietario>> GetMyDetails()
@@ -127,6 +122,25 @@ namespace Inmobiliaria_Alone.Controllers
 
             return Ok(db); // Devolvemos el objeto final
         }
+
+        // PUT /api/Propietarios/cambiar-password
+        [HttpPut("cambiar-password")]
+        [Authorize]
+        public async Task<IActionResult> CambiarPassword([FromBody] CambioPasswordRequest req)
+        {
+            var email = User.FindFirst(ClaimTypes.Name)?.Value;
+            var propietario = await _context.Propietarios.FirstOrDefaultAsync(p => p.Email == email);
+            if (propietario == null) return NotFound();
+
+            if (!VerifyPassword(req.PasswordActual, propietario.Password))
+                return BadRequest("Contraseña actual incorrecta.");
+
+            propietario.Password = HashPassword(req.NuevaPassword);
+            await _context.SaveChangesAsync();
+
+            return Ok("Contraseña actualizada con éxito.");
+        }
+
 
         // ---------------------------------------------------
         // RECUPERAR / RESTABLECER CONTRASEÑA
@@ -205,6 +219,8 @@ namespace Inmobiliaria_Alone.Controllers
             await _context.SaveChangesAsync();
             return Ok("Contraseña restablecida con éxito.");
         }
+
+        
 
         // ---------------------------------------------------
         // HELPERS
@@ -331,5 +347,11 @@ namespace Inmobiliaria_Alone.Controllers
     {
         public string? Usuario { get; set; }
         public string? Clave { get; set; }
+    }
+
+    public class CambioPasswordRequest
+    {
+        public string PasswordActual { get; set; } = string.Empty;
+        public string NuevaPassword { get; set; } = string.Empty;
     }
 }
