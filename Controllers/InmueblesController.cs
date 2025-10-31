@@ -7,6 +7,7 @@ using Inmobiliaria_Alone.Models;
 using Inmobiliaria_Alone.Data;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using System.Text.Json;
 
 namespace Inmobiliaria_Alone.Controllers
 {
@@ -119,5 +120,62 @@ namespace Inmobiliaria_Alone.Controllers
             await _context.SaveChangesAsync();
             return Ok(inm);
         }
+
+        [Authorize]
+        [HttpPost("cargar")]
+        public async Task<IActionResult> CargarInmueble([FromForm] IFormFile imagen, [FromForm] string inmueble)
+        {
+            try
+            {
+                //  Obtener el ID del propietario desde el token JWT
+                var idProp = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+                //  Buscar el propietario en la base de datos
+                var propietario = await _context.Propietarios.FirstOrDefaultAsync(p => p.IdPropietario == idProp);
+                if (propietario == null)
+                    return Unauthorized("No se encontró el propietario asociado al token.");
+
+                // Validar datos del inmueble
+                var body = JsonSerializer.Deserialize<Inmueble>(inmueble);
+                if (body == null)
+                    return BadRequest("Datos de inmueble inválidos.");
+
+                if (imagen == null || imagen.Length == 0)
+                    return BadRequest("Debe enviar una imagen válida.");
+
+                //  Guardar imagen en carpeta /uploads/inmuebles
+                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "inmuebles");
+                if (!Directory.Exists(uploadsDir))
+                    Directory.CreateDirectory(uploadsDir);
+
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(imagen.FileName);
+                var filePath = Path.Combine(uploadsDir, fileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await imagen.CopyToAsync(stream);
+                }
+
+                // Completar datos del inmueble
+                body.Foto = "/uploads/inmuebles/" + fileName;
+                body.IdPropietario = propietario.IdPropietario;
+                if (string.IsNullOrWhiteSpace(body.Estado))
+                    body.Estado = "No disponible"; // valor por defecto
+
+                // Guardar inmueble en DB
+                _context.Inmuebles.Add(body);
+                await _context.SaveChangesAsync();
+
+                return Ok(body);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error en CargarInmueble: {ex.Message}");
+                return StatusCode(500, "Error interno al crear el inmueble.");
+            }
+        }
+
+    
+
     }
 }

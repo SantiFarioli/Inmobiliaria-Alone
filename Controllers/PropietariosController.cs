@@ -27,9 +27,7 @@ namespace Inmobiliaria_Alone.Controllers
             _config = config;
         }
 
-        // ---------------------------------------------------
         // CRUD BÁSICO
-        // ---------------------------------------------------
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Propietario>>> GetPropietarios()
@@ -141,11 +139,8 @@ namespace Inmobiliaria_Alone.Controllers
             return Ok("Contraseña actualizada con éxito.");
         }
 
-
-        // ---------------------------------------------------
         // RECUPERAR / RESTABLECER CONTRASEÑA
-        // ---------------------------------------------------
-
+     
         [HttpPost("solicitar-restablecimiento")]
         [AllowAnonymous]
         public async Task<IActionResult> SolicitarRestablecimiento([FromForm] string email)
@@ -176,6 +171,7 @@ namespace Inmobiliaria_Alone.Controllers
             }
         }
 
+        
         [HttpGet("{id}/restablecer-contrasena")]
         [AllowAnonymous]
         public IActionResult MostrarFormularioRestablecimiento(int id, [FromQuery] string token)
@@ -220,11 +216,7 @@ namespace Inmobiliaria_Alone.Controllers
             return Ok("Contraseña restablecida con éxito.");
         }
 
-        
-
-        // ---------------------------------------------------
         // HELPERS
-        // ---------------------------------------------------
 
         private static void ApplyEditableFields(Propietario db, Propietario body)
         {
@@ -267,24 +259,31 @@ namespace Inmobiliaria_Alone.Controllers
 
         private string GenerateJwtToken(Propietario propietario)
         {
+            // Leer desde variables de entorno (o appsettings)
             var secret = _config["TokenAuthentication:SecretKey"]
                         ?? Environment.GetEnvironmentVariable("TokenAuthentication_SecretKey")
-                        ?? throw new ArgumentNullException("TokenAuthentication:SecretKey");
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication__SecretKey")
+                        ?? throw new ArgumentNullException("TokenAuthentication:SecretKey no configurada.");
 
             var issuer = _config["TokenAuthentication:Issuer"]
-                        ?? Environment.GetEnvironmentVariable("TokenAuthentication_Issuer");
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication_Issuer")
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication__Issuer")
+                        ?? "inmobiliaria-alone";
 
             var audience = _config["TokenAuthentication:Audience"]
-                        ?? Environment.GetEnvironmentVariable("TokenAuthentication_Audience");
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication_Audience")
+                        ?? Environment.GetEnvironmentVariable("TokenAuthentication__Audience")
+                        ?? "inmobiliaria-alone";
 
+            // Crear la clave simétrica
             var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+            // Crear claims del propietario
             var claims = new List<Claim>
             {
-                
                 new Claim(ClaimTypes.NameIdentifier, propietario.IdPropietario.ToString()),
-                new Claim(ClaimTypes.Name, propietario.Email), // te sirve para /perfil
+                new Claim(ClaimTypes.Name, propietario.Email ?? ""),
                 new Claim("FullName", $"{propietario.Nombre} {propietario.Apellido}"),
                 new Claim(ClaimTypes.Role, "Propietario"),
                 new Claim("Dni", propietario.Dni ?? string.Empty),
@@ -292,11 +291,12 @@ namespace Inmobiliaria_Alone.Controllers
                 new Claim("FotoPerfil", propietario.FotoPerfil ?? string.Empty)
             };
 
+            // Generar token con coincidencia exacta de Issuer/Audience
             var token = new JwtSecurityToken(
                 issuer: issuer,
                 audience: audience,
                 claims: claims,
-                expires: DateTime.Now.AddMinutes(60),
+                expires: DateTime.UtcNow.AddHours(1),
                 signingCredentials: creds
             );
 

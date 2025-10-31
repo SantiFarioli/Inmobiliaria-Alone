@@ -12,6 +12,8 @@ namespace Inmobiliaria_Alone.Models;
         public string Uso { get; set; } = string.Empty;
         public string Tipo { get; set; } = string.Empty;
         public int Ambientes { get; set; }
+        
+        [Column(TypeName = "decimal(10,2)")]
         public decimal Precio { get; set; }
         public string Estado { get; set; } = string.Empty;
         [MaxLength(512)]
