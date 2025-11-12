@@ -79,6 +79,8 @@ namespace Inmobiliaria_Alone.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromForm] LoginView loginView)
         {
+            Console.WriteLine($"Usuario recibido: {loginView.Usuario}");
+            Console.WriteLine($"Clave recibida: {loginView.Clave}");
             var propietario = await _context.Propietarios
                                 .FirstOrDefaultAsync(x => x.Email == loginView.Usuario);
 
@@ -110,16 +112,28 @@ namespace Inmobiliaria_Alone.Controllers
         public async Task<ActionResult<Propietario>> PutPerfil([FromBody] Propietario body)
         {
             var email = User.FindFirst(ClaimTypes.Name)?.Value;
-            if (email == null) return Unauthorized();
+            if (email == null)
+                return Unauthorized();
 
             var db = await _context.Propietarios.FirstOrDefaultAsync(p => p.Email == email);
-            if (db == null) return NotFound();
+            if (db == null)
+                return NotFound();
 
-            ApplyEditableFields(db, body);
+            // Solo actualizar si el campo viene con datos válidos (evita pisar con nulos)
+            db.Nombre = string.IsNullOrWhiteSpace(body.Nombre) ? db.Nombre : body.Nombre;
+            db.Apellido = string.IsNullOrWhiteSpace(body.Apellido) ? db.Apellido : body.Apellido;
+            db.Dni = string.IsNullOrWhiteSpace(body.Dni) ? db.Dni : body.Dni;
+            db.Telefono = string.IsNullOrWhiteSpace(body.Telefono) ? db.Telefono : body.Telefono;
+            db.Email = string.IsNullOrWhiteSpace(body.Email) ? db.Email : body.Email;
+            db.FotoPerfil = string.IsNullOrWhiteSpace(body.FotoPerfil) ? db.FotoPerfil : body.FotoPerfil;
+
+            // No tocamos Password / ResetToken / ResetTokenExpiry
+            _context.Propietarios.Update(db);
             await _context.SaveChangesAsync();
 
-            return Ok(db); // Devolvemos el objeto final
+            return Ok(db); // Devolvemos el objeto actualizado
         }
+
 
         // PUT /api/Propietarios/cambiar-password
         [HttpPut("cambiar-password")]
@@ -354,4 +368,6 @@ namespace Inmobiliaria_Alone.Controllers
         public string PasswordActual { get; set; } = string.Empty;
         public string NuevaPassword { get; set; } = string.Empty;
     }
+
+    
 }

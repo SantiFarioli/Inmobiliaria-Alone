@@ -28,7 +28,7 @@ namespace Inmobiliaria_Alone.Controllers
             return await _context.Inmuebles.ToListAsync();
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<ActionResult<Inmueble>> GetInmueble(int id)
         {
             var inmueble = await _context.Inmuebles.FindAsync(id);
@@ -42,7 +42,7 @@ namespace Inmobiliaria_Alone.Controllers
         }
 
         [Authorize]
-        [HttpPost]
+        [HttpPost("crear")]
         public async Task<ActionResult<Inmueble>> PostInmueble([FromBody] Inmueble body)
         {
             var email = User.FindFirst(ClaimTypes.Name)?.Value;
@@ -186,6 +186,37 @@ namespace Inmobiliaria_Alone.Controllers
             {
                 Console.WriteLine($"🔥 Error en CargarInmueble: {ex.Message}");
                 return StatusCode(500, "Error interno al crear el inmueble.");
+            }
+        }
+
+        // GET api/inmuebles/mios
+        [Authorize]
+        [HttpGet("mios")]
+        public async Task<ActionResult<IEnumerable<Inmueble>>> GetMisInmuebles()
+        {
+            try
+            {
+                var claim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (claim == null)
+                {
+                    Console.WriteLine("⚠️ No se encontró el Claim NameIdentifier");
+                    return Unauthorized("Token inválido o mal formado.");
+                }
+
+                var idProp = int.Parse(claim.Value);
+                Console.WriteLine($"✅ Claim NameIdentifier detectado: {idProp}");
+
+                var inmuebles = await _context.Inmuebles
+                    .Where(i => i.IdPropietario == idProp)
+                    .ToListAsync();
+
+                Console.WriteLine($"✅ Se encontraron {inmuebles.Count} inmuebles del propietario {idProp}");
+                return Ok(inmuebles);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"🔥 Error en GetMisInmuebles: {ex.Message}");
+                return StatusCode(500, "Error interno al obtener los inmuebles del propietario.");
             }
         }
 
