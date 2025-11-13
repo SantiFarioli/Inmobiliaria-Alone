@@ -1,16 +1,13 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Inmobiliaria_Alone.Models;
 using Inmobiliaria_Alone.Data;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
-using System.Text.Json;
 
 namespace Inmobiliaria_Alone.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class InmueblesController : ControllerBase
@@ -22,203 +19,68 @@ namespace Inmobiliaria_Alone.Controllers
             _context = context;
         }
 
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Inmueble>>> GetInmuebles()
-        {
-            return await _context.Inmuebles.ToListAsync();
-        }
+        //   GET api/inmuebles/5 (solo si te pertenece)
 
         [HttpGet("{id:int}")]
         public async Task<ActionResult<Inmueble>> GetInmueble(int id)
         {
-            var inmueble = await _context.Inmuebles.FindAsync(id);
+            var idProp = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
-            if (inmueble == null)
-            {
-                return NotFound();
-            }
+            var inmueble = await _context.Inmuebles
+                .FirstOrDefaultAsync(i => i.IdInmueble == id && i.IdPropietario == idProp);
 
-            return inmueble;
+            return inmueble == null
+                ? NotFound("No existe o no te pertenece.")
+                : Ok(inmueble);
         }
 
-        [Authorize]
+        //   POST api/inmuebles/crear (crear inmueble SIN ID de propietario)
         [HttpPost("crear")]
         public async Task<ActionResult<Inmueble>> PostInmueble([FromBody] Inmueble body)
         {
-            var email = User.FindFirst(ClaimTypes.Name)?.Value;
-            var p = await _context.Propietarios.FirstOrDefaultAsync(x => x.Email == email);
-            if (p == null) return Unauthorized();
+            var idProp = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
-            body.IdPropietario = p.IdPropietario;
-            if (string.IsNullOrWhiteSpace(body.Estado)) body.Estado = "Disponible";
+            body.IdPropietario = idProp;
+            if (string.IsNullOrWhiteSpace(body.Estado))
+                body.Estado = "Disponible";
 
             _context.Inmuebles.Add(body);
             await _context.SaveChangesAsync();
+
             return CreatedAtAction(nameof(GetInmueble), new { id = body.IdInmueble }, body);
         }
 
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutInmueble(int id, Inmueble inmueble)
-        {
-            if (id != inmueble.IdInmueble)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(inmueble).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!InmuebleExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteInmueble(int id)
-        {
-            var inmueble = await _context.Inmuebles.FindAsync(id);
-            if (inmueble == null)
-            {
-                return NotFound();
-            }
-
-            _context.Inmuebles.Remove(inmueble);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        private bool InmuebleExists(int id)
-        {
-            return _context.Inmuebles.Any(e => e.IdInmueble == id);
-        }
-
-        // PATCH api/Inmuebles/5/disponibilidad   body: true/false
+        //   PATCH api/inmuebles/5/disponibilidad  (habilitar/deshabilitar)
         [HttpPatch("{idInmueble:int}/disponibilidad")]
         public async Task<IActionResult> CambiarDisponibilidad(int idInmueble, [FromBody] bool disponible)
         {
-            var propietarioId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            var idProp = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
-            var inm = await _context.Inmuebles
-                .FirstOrDefaultAsync(i => i.IdInmueble == idInmueble && i.IdPropietario == propietarioId);
-            if (inm == null) return NotFound();
+            var inmueble = await _context.Inmuebles
+                .FirstOrDefaultAsync(i =>
+                    i.IdInmueble == idInmueble &&
+                    i.IdPropietario == idProp);
 
-            inm.Estado = disponible ? "Disponible" : "Ocupado"; // o "No disponible"
+            if (inmueble == null)
+                return NotFound("No existe o no te pertenece.");
+
+            inmueble.Estado = disponible ? "Disponible" : "No disponible";
+
             await _context.SaveChangesAsync();
-            return Ok(inm);
+            return Ok(inmueble);
         }
 
-        [Authorize]
-        [HttpPost("cargar")]
-        public async Task<IActionResult> CargarInmueble([FromForm] IFormFile imagen, [FromForm] string inmueble)
-        {
-            try
-            {
-                var idProp = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
-                var propietario = await _context.Propietarios.FirstOrDefaultAsync(p => p.IdPropietario == idProp);
-                if (propietario == null)
-                    return Unauthorized("No se encontró el propietario asociado al token.");
-
-                if (string.IsNullOrWhiteSpace(inmueble))
-                    return BadRequest("No se recibió el JSON del inmueble.");
-
-                Inmueble body;
-                try
-                {
-                    body = JsonSerializer.Deserialize<Inmueble>(inmueble, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    })!;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error deserializando inmueble: {ex.Message}");
-                    return BadRequest("Formato JSON inválido.");
-                }
-
-                if (body == null)
-                    return BadRequest("El cuerpo del inmueble está vacío.");
-
-                if (imagen == null || imagen.Length == 0)
-                    return BadRequest("Debe enviar una imagen válida.");
-
-                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "inmuebles");
-                if (!Directory.Exists(uploadsDir))
-                    Directory.CreateDirectory(uploadsDir);
-
-                var fileName = Guid.NewGuid() + Path.GetExtension(imagen.FileName);
-                var filePath = Path.Combine(uploadsDir, fileName);
-
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    await imagen.CopyToAsync(stream);
-                }
-
-                // URL pública absoluta
-                var baseUrl = $"{Request.Scheme}://{Request.Host}";
-                var fotoUrl = $"{baseUrl}/uploads/inmuebles/{fileName}";
-
-                body.IdPropietario = propietario.IdPropietario;
-                body.Foto = fotoUrl;
-                if (string.IsNullOrWhiteSpace(body.Estado))
-                    body.Estado = "No disponible";
-
-                _context.Inmuebles.Add(body);
-                await _context.SaveChangesAsync();
-
-                // Devolver inmueble ya con la URL absoluta
-                return Ok(body);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"🔥 Error en CargarInmueble: {ex.Message}");
-                return StatusCode(500, "Error interno al crear el inmueble.");
-            }
-        }
-
-        // GET api/inmuebles/mios
-        [Authorize]
+        //   GET api/inmuebles/mios  (lista solo del propietario)
         [HttpGet("mios")]
         public async Task<ActionResult<IEnumerable<Inmueble>>> GetMisInmuebles()
         {
-            try
-            {
-                var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-                if (claim == null)
-                {
-                    Console.WriteLine("⚠️ No se encontró el Claim NameIdentifier");
-                    return Unauthorized("Token inválido o mal formado.");
-                }
+            var idProp = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
-                var idProp = int.Parse(claim.Value);
-                Console.WriteLine($"✅ Claim NameIdentifier detectado: {idProp}");
+            var inmuebles = await _context.Inmuebles
+                .Where(i => i.IdPropietario == idProp)
+                .ToListAsync();
 
-                var inmuebles = await _context.Inmuebles
-                    .Where(i => i.IdPropietario == idProp)
-                    .ToListAsync();
-
-                Console.WriteLine($"✅ Se encontraron {inmuebles.Count} inmuebles del propietario {idProp}");
-                return Ok(inmuebles);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"🔥 Error en GetMisInmuebles: {ex.Message}");
-                return StatusCode(500, "Error interno al obtener los inmuebles del propietario.");
-            }
+            return Ok(inmuebles);
         }
-
     }
 }
